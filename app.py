@@ -1,5 +1,17 @@
 import streamlit as st
 import pandas as pd
+import json
+from pathlib import Path
+
+DONE_FILE = Path("done_items.json")
+
+def load_done():
+    if DONE_FILE.exists():
+        return set(json.loads(DONE_FILE.read_text()))
+    return set()
+
+def save_done(done_set):
+    DONE_FILE.write_text(json.dumps(list(done_set)))
 
 st.set_page_config(page_title="Product Image Review", layout="wide")
 st.title("Product Image Review")
@@ -13,6 +25,10 @@ def load_data():
     return df
 
 df = load_data()
+
+# Load done items
+if "done_items" not in st.session_state:
+    st.session_state.done_items = load_done()
 
 # Sidebar controls
 search = st.sidebar.text_input("Search by ID or Name")
@@ -74,6 +90,19 @@ for row_data in rows:
                 st.markdown(f"**{product_name}**")
 
             st.caption(f"`{product_id}`")
+
+            # Done checkbox
+            is_done = product_id in st.session_state.done_items
+            if st.checkbox("✓ Done", key=f"done_{product_id}", value=is_done):
+                if product_id not in st.session_state.done_items:
+                    st.session_state.done_items.add(product_id)
+                    save_done(st.session_state.done_items)
+                    st.rerun()
+            else:
+                if product_id in st.session_state.done_items:
+                    st.session_state.done_items.remove(product_id)
+                    save_done(st.session_state.done_items)
+                    st.rerun()
 
             if pd.notna(product_url) and product_url:
                 st.markdown(f"[View Product →]({product_url})")
