@@ -1,17 +1,67 @@
 import streamlit as st
 import pandas as pd
-import json
-from pathlib import Path
+import psycopg2
+from psycopg2 import sql
+from dotenv import load_dotenv
+import os
 
-DONE_FILE = Path("done_items.json")
+load_dotenv()
+
+# Database connection
+DB_URL = os.getenv("DB_URL")
+
+def get_db_connection():
+    return psycopg2.connect(DB_URL)
+
+def init_db():
+    """Create the done_items table if it doesn't exist."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS done_items (
+            product_id VARCHAR(255) PRIMARY KEY,
+            done_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
 
 def load_done():
-    if DONE_FILE.exists():
-        return set(json.loads(DONE_FILE.read_text()))
-    return set()
+    """Load all done product IDs from the database."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT product_id FROM done_items")
+        done_set = {row[0] for row in cur.fetchall()}
+        cur.close()
+        conn.close()
+        return done_set
+    except Exception as e:
+        st.error(f"Database error: {e}")
+        return set()
 
-def save_done(done_set):
-    DONE_FILE.write_text(json.dumps(list(done_set)))
+def mark_done(product_id, is_done):
+    """Mark a product as done or not done in the database."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        if is_done:
+            cur.execute("""
+                INSERT INTO done_items (product_id)
+                VALUES (%s)
+                ON CONFLICT (product_id) DO NOTHING
+            """, (product_id,))
+        else:
+            cur.execute("DELETE FROM done_items WHERE product_id = %s", (product_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        st.error(f"Database error: {e}")
+
+# Initialize database table
+init_db()
 
 st.set_page_config(page_title="Product Image Review", layout="wide")
 st.title("Product Image Review")
@@ -93,16 +143,16 @@ for row_data in rows:
 
             # Done checkbox
             is_done = product_id in st.session_state.done_items
-            if st.checkbox("✓ Done", key=f"done_{product_id}", value=is_done):
-                if product_id not in st.session_state.done_items:
+            new_is_done = st.checkbox("✓ Done", key=f"done_{product_id}", value=is_done)
+
+            # Update database if checkbox state changed
+            if new_is_done != is_done:
+                mark_done(product_id, new_is_done)
+                if new_is_done:
                     st.session_state.done_items.add(product_id)
-                    save_done(st.session_state.done_items)
-                    st.rerun()
-            else:
-                if product_id in st.session_state.done_items:
-                    st.session_state.done_items.remove(product_id)
-                    save_done(st.session_state.done_items)
-                    st.rerun()
+                else:
+                    st.session_state.done_items.discard(product_id)
+                st.rerun()
 
             if pd.notna(product_url) and product_url:
                 st.markdown(f"[View Product →]({product_url})")
