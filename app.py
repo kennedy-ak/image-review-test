@@ -98,6 +98,20 @@ def load_updated_images_csv():
     df = pd.DataFrame(rows, columns=["id", "product_name", "new_image_url"])
     return df.to_csv(index=False)
 
+def load_updated_urls():
+    """Load all updated image URLs from the database into a dict."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT product_id, new_image_url FROM updated_images")
+        updated_urls = {row[0]: row[1] for row in cur.fetchall()}
+        cur.close()
+        conn.close()
+        return updated_urls
+    except Exception as e:
+        st.error(f"Database error: {e}")
+        return {}
+
 # Initialize database table
 init_db()
 
@@ -119,8 +133,9 @@ if "done_items" not in st.session_state:
     st.session_state.done_items = load_done()
 
 # Track updated image URLs so the displayed image refreshes after save
+# Load from database on startup to get persisted updates
 if "updated_urls" not in st.session_state:
-    st.session_state.updated_urls = {}
+    st.session_state.updated_urls = load_updated_urls()
 
 # Sidebar controls
 search = st.sidebar.text_input("Search by ID or Name")
