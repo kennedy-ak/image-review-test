@@ -118,6 +118,10 @@ df = load_data()
 if "done_items" not in st.session_state:
     st.session_state.done_items = load_done()
 
+# Track updated image URLs so the displayed image refreshes after save
+if "updated_urls" not in st.session_state:
+    st.session_state.updated_urls = {}
+
 # Sidebar controls
 search = st.sidebar.text_input("Search by ID or Name")
 
@@ -179,6 +183,10 @@ for row_data in rows:
             product_name = item.get("product_name", "")
             description = item.get("description", "")
 
+            # Use updated URL if one was saved
+            if product_id in st.session_state.updated_urls:
+                img_url = st.session_state.updated_urls[product_id]
+
             if pd.notna(img_url) and img_url:
                 st.image(img_url, use_container_width=True)
             else:
@@ -207,7 +215,8 @@ for row_data in rows:
             if st.button("Save", key=f"save_{product_id}"):
                 if new_url and new_url.strip():
                     save_updated_image(product_id, product_name, new_url.strip())
-                    st.success("Saved!")
+                    st.session_state.updated_urls[product_id] = new_url.strip()
+                    st.rerun()
                 else:
                     st.warning("Enter a URL first")
 
